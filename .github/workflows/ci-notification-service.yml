@@ -1,0 +1,108 @@
+# ============================================================================
+# CI/CD — Notification Service
+# ============================================================================
+# Orchestrates the full CI/CD pipeline for notification-service by calling
+# centralized reusable workflows from lavenbloom-shared.
+#
+# Flow:
+#   PR       → SAST → SCA → Trivy Scan → Quality Gate
+#   develop  → Docker Publish (dev-SHA tag)
+#   release  → Docker Publish (semver tag) → CD (Helm update)
+# ============================================================================
+
+name: CI/CD — Notification Service
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+  release:
+    types: [created]
+
+permissions:
+  contents: read
+
+jobs:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # PR FLOW — Security & Quality Checks
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  sast:
+    if: github.event_name == 'pull_request'
+    uses: lavenbloom/lavenbloom-shared/.github/workflows/ci-sast.yml@main
+    with:
+      service-path: .
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_URL: ${{ secrets.SONAR_URL }}
+
+  sca:
+    needs: [sast]
+    if: github.event_name == 'pull_request'
+    uses: lavenbloom/lavenbloom-shared/.github/workflows/ci-sca.yml@main
+    with:
+      service-name: notification-service
+      service-path: .
+      runtime: python
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
+  trivy:
+    needs: [sca]
+    if: github.event_name == 'pull_request'
+    uses: lavenbloom/lavenbloom-shared/.github/workflows/ci-docker-build.yml@main
+    with:
+      service-name: notification-service
+      service-path: .
+
+  # Single status check for branch protection rules
+  pr-check:
+    name: PR Quality Gate
+    needs: [sast, sca, trivy]
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "✅ All PR checks passed"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # DEVELOP — Publish dev image on merge
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  dev-publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    uses: lavenbloom/lavenbloom-shared/.github/workflows/ci-docker-publish.yml@main
+    with:
+      service-name: notification-service
+      service-path: .
+      environment: develop
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  # RELEASE — Publish release image + update Helm chart
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  publish:
+    if: github.event_name == 'release'
+    uses: lavenbloom/lavenbloom-shared/.github/workflows/ci-docker-publish.yml@main
+    with:
+      service-name: notification-service
+      service-path: .
+      environment: main
+    secrets:
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+  cd:
+    needs: [publish]
+    if: needs.publish.result == 'success'
+    uses: lavenbloom/lavenbloom-shared/.github/workflows/cd-template.yml@main
+    with:
+      service-name: notification-service
+      image-tag: ${{ github.event.release.tag_name }}
+      environment: main
+    secrets:
+      HELM_REPO_PAT: ${{ secrets.HELM_REPO_PAT }}
