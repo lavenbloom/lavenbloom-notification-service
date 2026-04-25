@@ -45,3 +45,6 @@ def process_queue():
 def start_worker_thread():
     thread = threading.Thread(target=process_queue, daemon=True)
     thread.start()
+
+if __name__ == '__main__':
+    process_queue()
