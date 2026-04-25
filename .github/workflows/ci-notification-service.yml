@@ -33,6 +33,7 @@ jobs:
     if: github.event_name == 'pull_request'
     uses: lavenbloom/lavenbloom-shared/.github/workflows/ci-sast.yml@main
     with:
+      service-name: notification-service
       service-path: .
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
@@ -67,7 +68,7 @@ jobs:
       - run: echo "✅ All PR checks passed"
 
   # ═══════════════════════════════════════════════════════════════════════════
-  # DEVELOP — Publish dev image on merge
+  # DEVELOP — Publish dev image on merge + update Helm chart for dev
   # ═══════════════════════════════════════════════════════════════════════════
 
   dev-publish:
@@ -77,9 +78,23 @@ jobs:
       service-name: notification-service
       service-path: .
       environment: develop
+      target-env: dev
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+
+
+  dev-cd:
+    needs: [dev-publish]
+    if: needs.dev-publish.result == 'success'
+    uses: lavenbloom/lavenbloom-shared/.github/workflows/cd-template.yml@main
+    with:
+      service-name: notification-service
+      image-tag: ${{ needs.dev-publish.outputs.image-tag }}
+      environment: main 
+      target-env: dev               # values-dev.yaml
+    secrets:
+      HELM_REPO_PAT: ${{ secrets.HELM_REPO_PAT }}
 
   # ═══════════════════════════════════════════════════════════════════════════
   # RELEASE — Publish release image + update Helm chart
@@ -92,6 +107,8 @@ jobs:
       service-name: notification-service
       service-path: .
       environment: main
+      target-env: prod
+      release-tag: ${{ github.event.release.tag_name }}               
     secrets:
       DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
       DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
@@ -102,7 +119,8 @@ jobs:
     uses: lavenbloom/lavenbloom-shared/.github/workflows/cd-template.yml@main
     with:
       service-name: notification-service
-      image-tag: ${{ github.event.release.tag_name }}
+      image-tag: ${{ needs.publish.outputs.image-tag }}
       environment: main
+      target-env: prod               # values-prod.yaml
     secrets:
       HELM_REPO_PAT: ${{ secrets.HELM_REPO_PAT }}
