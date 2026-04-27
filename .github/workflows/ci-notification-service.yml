@@ -92,7 +92,7 @@ jobs:
       service-name: notification-service
       service-key: notificationService
       image-tag: ${{ needs.dev-publish.outputs.image-tag }}
-      environment: main 
+      environment: develop
       target-env: dev               # values-dev.yaml
     secrets:
       HELM_REPO_PAT: ${{ secrets.HELM_REPO_PAT }}
