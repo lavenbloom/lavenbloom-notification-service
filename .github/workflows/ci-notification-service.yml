@@ -90,6 +90,7 @@ jobs:
     uses: lavenbloom/lavenbloom-shared/.github/workflows/cd-template.yml@main
     with:
       service-name: notification-service
+      service-key: notificationService
       image-tag: ${{ needs.dev-publish.outputs.image-tag }}
       environment: main 
       target-env: dev               # values-dev.yaml
@@ -119,6 +120,7 @@ jobs:
     uses: lavenbloom/lavenbloom-shared/.github/workflows/cd-template.yml@main
     with:
       service-name: notification-service
+      service-key: notificationService
       image-tag: ${{ needs.publish.outputs.image-tag }}
       environment: main
       target-env: prod               # values-prod.yaml
